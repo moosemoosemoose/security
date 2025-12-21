@@ -1,3 +1,4 @@
+#this tool strips metadata from images - simple version
 from PIL import Image
 from PIL import ExifTags
 from PIL.ExifTags import GPSTAGS
@@ -64,7 +65,7 @@ with Image.open(args.file) as im:
         print(im.info['xmp'])
     print(gpsData)
 
-    
+    #Making a new image from only the images pixels
     clean = Image.new(im.mode, im.size)
     clean.putdata(data)
     clean.save("stripped.jpg")
