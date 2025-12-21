@@ -1,3 +1,4 @@
+#Stegasaurus - Steganography tool for reading/writing encrypted messages in an image
 from PIL import Image
 import argparse
 import sys
@@ -86,7 +87,7 @@ def max_capacity_bits(im):
     width, height = im.size
     return width * height * 3
 
-def extractLSB(im, max_bits=None):
+def extract_lsb(im, max_bits=None):
     """
     Extract the least significant bit of each RGB channel from the image.
     Stops if max_bits is reached (useful for reading length header or message only).
@@ -106,7 +107,7 @@ def extractLSB(im, max_bits=None):
 
 # ------------------- Encoder / Writer -------------------
 
-def msgEncoder(im, msg, password):
+def msg_encoder(im, msg, password):
     """
     Encrypts the message with a password and embeds it into the image's LSBs.
     Returns a modified image.
@@ -148,11 +149,11 @@ def read_message(im, password):
     Returns decoded string or error message if decryption fails.
     """
     # Step 1: extract 32-bit length header
-    header_bits = extractLSB(im, 32)
+    header_bits = extract_lsb(im, 32)
     msg_len = int(''.join(str(b) for b in header_bits), 2)  # Convert bits to int
 
     # Step 2: extract message bits based on length
-    all_bits = extractLSB(im, 32 + msg_len * 8)
+    all_bits = extract_lsb(im, 32 + msg_len * 8)
     msg_bits = all_bits[32:]                               # Skip header bits
     msg_bytes = bits_to_bytes(msg_bits)                    # Convert bits to bytes
 
@@ -189,7 +190,7 @@ if __name__ == "__main__":
         elif args.mode == "w":
             msg = input("Enter message to encode: ")
             password = input("Enter password: ")
-            im = msgEncoder(im, msg, password)
+            im = msg_encoder(im, msg, password)
             out_file = "encoded.png"
             im.save(out_file)
             print(f"Message encoded to {out_file}")

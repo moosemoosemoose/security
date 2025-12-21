@@ -1,4 +1,4 @@
-#this tool strips metadata from images - simple version
+#ImageStripper - this tool strips metadata from images - simple version
 from PIL import Image
 from PIL import ExifTags
 from PIL.ExifTags import GPSTAGS
@@ -24,37 +24,37 @@ args = parse_args()
 with Image.open(args.file) as im:
     #im.show()
     exif = im.getexif()
-    gpsData = {}
-    gpsIFD = exif.get_ifd(ExifTags.IFD.GPSInfo)
+    gps_data = {}
+    gps_ifd = exif.get_ifd(ExifTags.IFD.GPSInfo)
     data = list(im.getdata())
     
     
     print("Filename: ", im.filename)
     print("Format: ", im.format)
-    print("GPS IFD: ", gpsIFD)
+    print("GPS IFD: ", gps_ifd)
 
     #EXIF
     if not exif:
         print("No EXIF data found.")
     else:
         
-        for tagId, value in exif.items():
-            tag = ExifTags.TAGS.get(tagId, tagId)
+        for tag_id, value in exif.items():
+            tag = ExifTags.TAGS.get(tag_id, tag_id)
             print(f"{tag}: {value}")
     #GPS       
-    for key, val in gpsIFD.items():
+    for key, val in gps_ifd.items():
         name = GPSTAGS.get(key, key)
-        gpsData[name] = val
+        gps_data[name] = val
 
     #XMP
     try:
-        xmpData = im.getxmp()
+        xmp_data = im.getxmp()
     except Exception as e:
         print("XMP Parse error: ", e)
         
-    if xmpData:
-        print("XMP (parsed):", xmpData)
-        print(xmpData)
+    if xmp_data:
+        print("XMP (parsed):", xmp_data)
+        print(xmp_data)
     elif 'xmp' in im.info:
         print("XMP (raw XML):")
         print(im.info['xmp'])
@@ -63,7 +63,7 @@ with Image.open(args.file) as im:
 
     if 'xmp' in im.info:
         print(im.info['xmp'])
-    print(gpsData)
+    print(gps_data)
 
     #Making a new image from only the images pixels
     clean = Image.new(im.mode, im.size)

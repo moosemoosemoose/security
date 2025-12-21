@@ -1,5 +1,5 @@
 #WARNING: DON'T USE FOR ANYTHING, JUST LEARN
-#Should take roughly 12 minutes to scan a system and output text
+#~12 minutes to scan a system (65535 ports) and output text
 import socket
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
@@ -38,8 +38,8 @@ def parse_args():
     parser.add_argument(
         "-p", "--ports",
         type=int,
-        default=155,
-        help="Scan ports 1-N (default: 155)"
+        default=65535,
+        help="Scan ports 1-N (default: 65535)"
     )
 
     return parser.parse_args()
@@ -59,17 +59,17 @@ def check_port(host, port):
         s.close()
    
 #Async wrapper - scan ports
-async def checkPorts(currentIP, numPorts):
+async def check_ports(current_ip, num_ports):
     tasks = [
-        asyncio.to_thread(check_port, currentIP, port)
-        for port in range(numPorts)
+        asyncio.to_thread(check_port, current_ip, port)
+        for port in range(num_ports)
         ]
     
     results = await asyncio.gather(*tasks)
     return [p for p in results if p is not None]
 
 #Async banner grab   
-async def grabBanner(ip, port, timeout=2):
+async def grab_banner(ip, port, timeout=2):
     try:
         reader, writer = await asyncio.wait_for(asyncio.open_connection(ip, port), timeout=timeout                                    )
         await asyncio.sleep(0.2) #allow banner to arrive
@@ -81,56 +81,54 @@ async def grabBanner(ip, port, timeout=2):
         return None
 
 #Grab banners for all ports
-async def grabBanners(ip, openPorts):
+async def grab_banners(ip, open_ports):
         banner_map = {}
-        for port in openPorts:
-            banner = await grabBanner(ip, port)
+        for port in open_ports:
+            banner = await grab_banner(ip, port)
             banner_map[port] = banner
         return banner_map
 
 #Main async function
-async def main(currentIP, numPorts):
+async def main(current_ip, num_orts):
     loop = asyncio.get_running_loop() 
     #getting an amount of workers based on system and set TPE
     workers = min(100, (os.cpu_count() or 1) * 10)
     loop.set_default_executor(ThreadPoolExecutor(workers))
     
     # Safe printing regardless of how ports are passed
-    if isinstance(numPorts, range):
-        print(f"Scanning {currentIP} for ports {numPorts.start}-{numPorts.stop - 1}...")
+    if isinstance(num_ports, range):
+        print(f"Scanning {current_ip} for ports {num_ports.start}-{num_ports.stop - 1}...")
     else:
-        print(f"Scanning {currentIP} for ports: {numPorts}")
-    openPorts = await checkPorts(currentIP, numPorts)
-    print(f"\nOpen ports found: {openPorts}\n")
+        print(f"Scanning {current_ip} for ports: {num_ports}")
+    open_ports = await check_ports(current_ip, num_ports)
+    print(f"\nOpen ports found: {open_ports}\n")
     
-    banners = await grabBanners(currentIP, openPorts)
+    banners = await grab_banners(current_ip, open_ports)
 
     #print cleanly
-    for port in openPorts:
+    for port in open_ports:
         service = KNOWN_PORTS.get(port, "Unknown")
         banner = banners.get(port, "")
-        print(f"{currentIP}:{port} ({service}) → {repr(banner)}")
+        print(f"{current_ip}:{port} ({service}) → {repr(banner)}")
 
 
 args = parse_args() 
-numPorts = args.ports
-hostName = socket.gethostname()
-hostInfo = socket.gethostbyname_ex(hostName)
-hostText, hostAlias, hostIP = hostInfo
-currentIP = str(hostIP)
-currentIP = currentIP.replace("'", "")
-currentIP = currentIP.replace("[", "")
-currentIP = currentIP.replace("]", "")
-print("Host Name: " + str(hostText))
-print("Host Alias: " + str(hostAlias))
-print("Host IP: " + str(currentIP))
-openPorts = []
+num_ports = args.ports
+host_name = socket.gethostname()
+host_info = socket.gethostbyname_ex(host_name)
+host_text, host_alias, host_ip = host_info
+current_ip = str(host_ip)
+current_ip = current_ip.replace("'", "").replace("[", "").replace("]", "")
+print("Host Name: " + str(host_text))
+print("Host Alias: " + str(host_alias))
+print("Host IP: " + str(current_ip))
+open_ports = []
 
 
-startTime = time.perf_counter()
-asyncio.run(main(currentIP, numPorts))
-endTime = time.perf_counter()
-elapsedTime = endTime - startTime
+start_time = time.perf_counter()
+asyncio.run(main(current_ip, num_ports))
+end_time = time.perf_counter()
+elapsed_time = end_time - start_time
 
-print(f"Finished in: {elapsedTime:.4f} seconds.")
-input('Press ENTER to exit')
+print(f"Finished in: {elapsed_time:.4f} seconds.")
+
