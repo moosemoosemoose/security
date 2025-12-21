@@ -1,10 +1,7 @@
-#WARNING: DON'T USE FOR ANYTHING, JUST LEARN
-#~12 minutes to scan a system (65535 ports) and output text
+'''WARNING: DON'T USE FOR ANYTHING - ~12 minutes to scan (65535 ports) and output text'''
 import socket
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
-import sys
-import errno
 import time
 import os
 import argparse
@@ -22,8 +19,8 @@ KNOWN_PORTS = {
     445: "SMB"
 }
 
-#args
 def parse_args():
+    '''Arguments - ip address and number of ports'''
     parser = argparse.ArgumentParser(
         description="Async port scanner"
     )
@@ -44,9 +41,8 @@ def parse_args():
 
     return parser.parse_args()
 
-#Thread-safe port check
 def check_port(host, port):
-    # Create a new socket for each connection attempt
+    '''Thread-safe port check'''
     s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     s.settimeout(1) # Set a timeout for the connection attempt
 
@@ -57,62 +53,72 @@ def check_port(host, port):
         return None
     finally:
         s.close()
-   
-#Async wrapper - scan ports
-async def check_ports(current_ip, num_ports):
+
+async def check_ports(ip, ports):
+    '''Async wrapper - scan ports'''
     tasks = [
-        asyncio.to_thread(check_port, current_ip, port)
-        for port in range(num_ports)
+        asyncio.to_thread(check_port, ip, port)
+        for port in range(ports)
         ]
-    
     results = await asyncio.gather(*tasks)
     return [p for p in results if p is not None]
 
-#Async banner grab   
 async def grab_banner(ip, port, timeout=2):
+    '''Async banner grab'''
     try:
-        reader, writer = await asyncio.wait_for(asyncio.open_connection(ip, port), timeout=timeout                                    )
+        reader, writer = (
+            await asyncio.wait_for(asyncio.open_connection(ip, port), timeout=timeout)
+        )
         await asyncio.sleep(0.2) #allow banner to arrive
         data = await asyncio.wait_for(reader.read(4096), timeout=timeout)
         writer.close()
         await writer.wait_closed()
         return data.decode(errors="ignore").strip()
-    except Exception:
+
+    except asyncio.CancelledError:
+        raise  # MUST re-raise in async code
+
+    except (
+        asyncio.TimeoutError,
+        ConnectionRefusedError,
+        ConnectionResetError,
+        OSError,
+    ):
         return None
 
-#Grab banners for all ports
-async def grab_banners(ip, open_ports):
-        banner_map = {}
-        for port in open_ports:
-            banner = await grab_banner(ip, port)
-            banner_map[port] = banner
-        return banner_map
+async def grab_banners(ip, o_ports):
+    '''Grab banners for all ports'''
+    banner_map = {}
+    for port in o_ports:
+        banner = await grab_banner(ip, port)
+        banner_map[port] = banner
+    return banner_map
 
-#Main async function
-async def main(current_ip, num_orts):
-    loop = asyncio.get_running_loop() 
+async def main(ip, ports):
+    '''Main async function'''
+    loop = asyncio.get_running_loop()
     #getting an amount of workers based on system and set TPE
     workers = min(100, (os.cpu_count() or 1) * 10)
     loop.set_default_executor(ThreadPoolExecutor(workers))
-    
+
     # Safe printing regardless of how ports are passed
-    if isinstance(num_ports, range):
-        print(f"Scanning {current_ip} for ports {num_ports.start}-{num_ports.stop - 1}...")
+    if isinstance(ports, range):
+        print(f"Scanning {ip} for ports {ports.start}-{ports.stop - 1}...")
     else:
-        print(f"Scanning {current_ip} for ports: {num_ports}")
-    open_ports = await check_ports(current_ip, num_ports)
-    print(f"\nOpen ports found: {open_ports}\n")
-    
-    banners = await grab_banners(current_ip, open_ports)
+        print(f"Scanning {ip} for ports: {ports}")
+    o_ports = await check_ports(ip, ports)
+    print(f"\nOpen ports found: {o_ports}\n")
+
+    banners = await grab_banners(ip, o_ports)
 
     #print cleanly
-    for port in open_ports:
+    for port in o_ports:
         service = KNOWN_PORTS.get(port, "Unknown")
         banner = banners.get(port, "")
-        print(f"{current_ip}:{port} ({service}) → {repr(banner)}")
+        print(f"{ip}:{port} ({service}) → {repr(banner)}")
 
 
-args = parse_args() 
+args = parse_args()
 num_ports = args.ports
 host_name = socket.gethostname()
 host_info = socket.gethostbyname_ex(host_name)
@@ -131,4 +137,3 @@ end_time = time.perf_counter()
 elapsed_time = end_time - start_time
 
 print(f"Finished in: {elapsed_time:.4f} seconds.")
-

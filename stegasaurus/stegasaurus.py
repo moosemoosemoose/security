@@ -1,5 +1,5 @@
-#Stegasaurus - Steganography tool for reading/writing encrypted messages in an image
-from PIL import Image
+'''STEGASAURUS
+Steganography tool for reading/writing encrypted messages in an image'''
 import argparse
 import sys
 import os
@@ -7,7 +7,7 @@ import base64
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 from cryptography.hazmat.primitives import hashes
 from cryptography.fernet import Fernet
-
+from PIL import Image
 # ------------------- Crypto helpers -------------------
 
 def derive_key(password: str, salt: bytes):
@@ -77,24 +77,52 @@ def bits_to_bytes(bits):
         out.append(byte)
     return bytes(out)
 
+def prepare_message_bits(message, password):
+    '''Prepping bits'''
+    msg_bytes = encrypt_message(message.encode("utf-8"), password)
+    msg_len = len(msg_bytes)
+    header_bits = int_to_bits(msg_len, 32)
+    msg_bits = bytes_to_bits(msg_bytes)
+    return header_bits + msg_bits
+
+def embed_bits_into_image(im_name, all_bits):
+    '''Embedding bits (Too much was being done in one scope)'''
+    pixels = im_name.load()
+    width, height = im_name.size
+    bit_idx = 0
+
+    for y in range(height):
+        for x in range(width):
+            if bit_idx >= len(all_bits):
+                return im_name
+            r, g, b = pixels[x, y]
+            channels = [r, g, b]
+            for i in range(3):
+                if bit_idx < len(all_bits):
+                    channels[i] = (channels[i] & ~1) | all_bits[bit_idx]
+                    bit_idx += 1
+            pixels[x, y] = tuple(channels)
+
+    return im_name
+
 # ------------------- LSB helpers -------------------
 
-def max_capacity_bits(im):
+def max_capacity_bits(im_name):
     """
     Calculate maximum number of bits that can be stored in an image.
     3 bits per pixel (RGB), ignoring alpha.
     """
-    width, height = im.size
+    width, height = im_name.size
     return width * height * 3
 
-def extract_lsb(im, max_bits=None):
+def extract_lsb(im_name, max_bits=None):
     """
     Extract the least significant bit of each RGB channel from the image.
     Stops if max_bits is reached (useful for reading length header or message only).
     Returns a flat list of bits.
     """
-    width, height = im.size
-    pixels = im.load()
+    width, height = im_name.size
+    pixels = im_name.load()
     bits = []
     for y in range(height):
         for x in range(width):
@@ -107,53 +135,32 @@ def extract_lsb(im, max_bits=None):
 
 # ------------------- Encoder / Writer -------------------
 
-def msg_encoder(im, msg, password):
-    """
+def msg_encoder(im_name, message, password):
+    '''
     Encrypts the message with a password and embeds it into the image's LSBs.
     Returns a modified image.
-    """
-    im = im.copy().convert("RGB")                     # Make a copy and ensure RGB format
-    msg_bytes = encrypt_message(msg.encode("utf-8"), password)  # Encrypt message
-    msg_len = len(msg_bytes)                          # Length of encrypted data in bytes
+    '''
+    im_name = im_name.copy().convert("RGB")
+    all_bits = prepare_message_bits(message, password)
 
-    header_bits = int_to_bits(msg_len, 32)           # 32-bit header to store length
-    msg_bits = bytes_to_bits(msg_bytes)              # Convert encrypted bytes to bits
-    all_bits = header_bits + msg_bits                # Concatenate header + message bits
-
-    if len(all_bits) > max_capacity_bits(im):        # Check capacity
+    if len(all_bits) > max_capacity_bits(im_name):
         raise ValueError("Message too large for this image")
 
-    pixels = im.load()
-    width, height = im.size
-    bit_idx = 0                                      # Tracks which bit to embed
-
-    for y in range(height):
-        for x in range(width):
-            if bit_idx >= len(all_bits):            # Stop once all bits are embedded
-                return im
-            r, g, b = pixels[x, y]
-            channels = [r, g, b]
-            for i in range(3):
-                if bit_idx < len(all_bits):
-                    # Clear LSB of channel and set it to next message bit
-                    channels[i] = (channels[i] & ~1) | all_bits[bit_idx]
-                    bit_idx += 1
-            pixels[x, y] = tuple(channels)
-    return im
+    return embed_bits_into_image(im_name, all_bits)
 
 # ------------------- Reader / Decoder -------------------
 
-def read_message(im, password):
+def read_message(im_name, password):
     """
     Extracts and decrypts a hidden message from the image.
     Returns decoded string or error message if decryption fails.
     """
     # Step 1: extract 32-bit length header
-    header_bits = extract_lsb(im, 32)
+    header_bits = extract_lsb(im_name, 32)
     msg_len = int(''.join(str(b) for b in header_bits), 2)  # Convert bits to int
 
     # Step 2: extract message bits based on length
-    all_bits = extract_lsb(im, 32 + msg_len * 8)
+    all_bits = extract_lsb(im_name, 32 + msg_len * 8)
     msg_bits = all_bits[32:]                               # Skip header bits
     msg_bytes = bits_to_bytes(msg_bits)                    # Convert bits to bytes
 
@@ -161,12 +168,13 @@ def read_message(im, password):
     try:
         decrypted = decrypt_message(msg_bytes, password)
         return decrypted.decode("utf-8")
-    except Exception:
+    except (AttributeError, ValueError, KeyError, OSError):
         return "[!] Incorrect password or corrupted data"
 
 # ------------------- CLI -------------------
 
 def parse_args():
+    '''This is here to please pylint'''
     parser = argparse.ArgumentParser(description="LSB Steganography with password")
     parser.add_argument("filename", help="Image file to read/write")
     parser.add_argument("-m", "--mode", choices=["r", "w"], default="r",
@@ -183,14 +191,14 @@ if __name__ == "__main__":
         im = im.convert("RGB")
 
         if args.mode == "r":
-            password = input("Enter password: ")
-            message = read_message(im, password)
-            print("Hidden message:", message)
+            passwd = input("Enter password: ")
+            msg = read_message(im, passwd)
+            print("Hidden message:", msg)
 
         elif args.mode == "w":
             msg = input("Enter message to encode: ")
-            password = input("Enter password: ")
-            im = msg_encoder(im, msg, password)
-            out_file = "encoded.png"
-            im.save(out_file)
-            print(f"Message encoded to {out_file}")
+            passwd = input("Enter password: ")
+            im = msg_encoder(im, msg, passwd)
+            OUT_FILE = "encoded.png"
+            im.save(OUT_FILE)
+            print(f"Message encoded to {OUT_FILE}")
