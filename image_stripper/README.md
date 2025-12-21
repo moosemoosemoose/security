@@ -1,4 +1,4 @@
-#ImageStripper (Metadata Removal Tool)
+# ImageStripper (Metadata Removal Tool)
 
 ImageStripper is a simple Python utility that removes metadata from image files by rebuilding the image using only its raw pixel data. The project is designed as a learning exercise to explore image formats, EXIF/GPS/XMP metadata, and how metadata persists across image saves.
 
