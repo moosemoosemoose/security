@@ -4,6 +4,7 @@ import argparse
 import sys
 import os
 import base64
+import time
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 from cryptography.hazmat.primitives import hashes
 from cryptography.fernet import Fernet
@@ -194,6 +195,7 @@ if __name__ == "__main__":
             passwd = input("Enter password: ")
             msg = read_message(im, passwd)
             print("Hidden message:", msg)
+            time.sleep(5)
 
         elif args.mode == "w":
             msg = input("Enter message to encode: ")
