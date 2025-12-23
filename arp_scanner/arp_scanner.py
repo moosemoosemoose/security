@@ -9,7 +9,9 @@ import socket
 import logging
 import scapy.all as scapy
 
-#OUI MAP
+# -------------------------------
+# OUI Map
+# -------------------------------
 def load_oui_database():
     """
     Loads the IEEE OUI database from local file.
@@ -113,7 +115,7 @@ def arp_scan(target_ip):
         target_ip (str): Target IP or CIDR range to scan
 
     Returns:
-        list: List of discovered devices with IP, MAC, vendor, and hostname
+        list: List of discovered devices with IP, MAC, hostname, and vendor
     """
     devices = []  # List to store discovered devices
 
