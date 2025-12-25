@@ -1,0 +1,7 @@
+# Malware scanner dependencies for ThreatScout
+
+pefile             # For PE analysis
+yara-python        # YARA rule scanning
+tqdm               # Progress bars
+pywin32            # Windows publisher detection (GetFileVersionInfo)
+python-magic-bin   # File type detection on Windows
