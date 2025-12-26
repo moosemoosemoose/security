@@ -1,3 +1,6 @@
+![Alt text for screen readers](threaticon.png)
+## ThreatScout
+----------------------------------------------
 ## Installation
 
 Clone this repository and install dependencies:
