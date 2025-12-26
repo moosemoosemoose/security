@@ -1,3 +1,6 @@
+## Threat Scout
+Full feature malware scanner. (in progress)
+
 ## ARP Scanner
 A Python-based ARP scanner for discovering devices on a local network.  
 Performs Layer 2 ARP requests to identify active hosts and retrieve IP addresses, MAC addresses, hostnames, and vendor information using an IEEE OUI database. Results are printed to the console and logged to a file.
