@@ -1,4 +1,4 @@
-![Alt text for screen readers](threaticon.png)
+![Alt text for screen readers](../threaticon.png)
 ## ThreatScout
 ----------------------------------------------
 ## Installation
