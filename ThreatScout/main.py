@@ -16,18 +16,16 @@ from utils.filewalker import walk_directory
 from engine.hash_scan import sha256_file
 from engine.filetype import get_file_type
 from engine.entropy import calculate_entropy
-from engine.yara_scan import load_yara_rules, scan_with_yara
 from engine.pe_analysis import analyze_pe_sections
 
 
 # Thresholds & scoring
-LOG_SCORE_THRESHOLD = 50
+LOG_SCORE_THRESHOLD = 10
 SCORING = {
     "high_entropy": 30,
-    "packed_section": 25,
-    "yara_match": 20,
+    "packed_section": 30,
     "pe_file": 10,
-    "signed": -15, #reduces suspicion! see: get_publisher
+    "signed": -10, #reduces suspicion! see: get_publisher
 }
 
 # Lock for thread-safe log writes
@@ -51,50 +49,45 @@ def parse_args():
 # --------------------------
 # Scanner
 # --------------------------
-def scan_file(file_path, yara_rules):
+def scan_file(file_path):
     """
-    Scans the file
+    Scans a file and returns a result dict safely for any file type.
     """
-    file_hash = sha256_file(file_path)
-    file_type = get_file_type(file_path)
-
-    if not file_hash or not file_type:
-        return None
-
     result = {
         "path": file_path,
-        "type": file_type,
-        "hash": file_hash,
+        "type": get_file_type(file_path),
+        "hash": sha256_file(file_path),
         "entropy": None,
-        "yara": [],
-        "sections": []
+        "sections": [],
+        "publisher": None,
     }
 
-    suspicious_entropy = False
+    # Always return a dict, even on failure
+    if not result["type"] or not result["hash"]:
+        return result
 
-    if "PE32" in file_type or "executable" in file_type.lower():
-        entropy = calculate_entropy(file_path)
-        result["entropy"] = entropy
+    # --------------------------
+    # Entropy
+    # --------------------------
+    try:
+        result["entropy"] = calculate_entropy(file_path)
+    except Exception:
+        result["entropy"] = None
 
-        if entropy and entropy > 7.2:
-            suspicious_entropy = True
+    # --------------------------
+    # PE-specific analysis
+    # --------------------------
+    if "PE32" in result["type"]:
+        try:
+            result["sections"] = analyze_pe_sections(file_path) or []
+        except Exception:
+            result["sections"] = []
 
-    if suspicious_entropy:
-        result["yara"] = scan_with_yara(file_path, yara_rules)
-
-        sections = analyze_pe_sections(file_path)
-        if sections:
-            result["sections"] = [
-                s for s in sections if s["entropy"] > 7.2
-            ]
-
-    publisher = None
-    if "PE32" in file_type:
-        publisher = get_publisher(file_path)
-        if publisher:
-            result["publisher"] = publisher
-        else:
+        try:
+            result["publisher"] = get_publisher(file_path)
+        except Exception:
             result["publisher"] = None
+
     return result
 
 # --------------------------
@@ -117,8 +110,6 @@ def wait_first(futures, log_file=None):
         print(f"  Hash    : {result['hash']}")
         if result.get("entropy") is not None:
             print(f"  Entropy : {result['entropy']}")
-        if result.get("yara"):
-            print(f"  YARA    : {', '.join(result['yara'])}")
         if result.get("sections"):
             for sec in result["sections"]:
                 print(
@@ -129,6 +120,7 @@ def wait_first(futures, log_file=None):
 
         # Compute score
         score_result(result, log_file=log_file)
+
     print()
 
     return done, pending
@@ -136,59 +128,79 @@ def wait_first(futures, log_file=None):
 # --------------------------
 # Helper: scoring function
 # --------------------------
-def score_result(result, log_file=None):
+def score_result(result):
     """
-    Calculates the scores
+    Calculate a suspicion score and reasons safely.
+    Works for any file type, avoids NoneType issues.
+    Returns: (score:int, reasons:list[str])
     """
     score = 0
     reasons = []
 
-    # High entropy
-    if result.get("entropy") and result["entropy"] > 7.2:
+    # ----------------------------
+    # Entropy-based scoring
+    # ----------------------------
+    entropy = result.get("entropy")
+    if entropy is not None and entropy > 7.2:
         score += SCORING["high_entropy"]
         reasons.append(f"+{SCORING['high_entropy']} high file entropy")
 
-    # Sections
-    if result.get("sections"):
-        for sec in result["sections"]:
-            if sec["entropy"] > 7.2 and sec["executable"]:
-                score += SCORING["packed_section"]
-                reasons.append(
-                    f"+{SCORING['packed_section']} packed executable section ({sec['name']})"
-                )
-                break
+    # ----------------------------
+    # PE section analysis
+    # ----------------------------
+    for sec in result.get("sections") or []:
+        if sec.get("entropy", 0) > 7.2 and sec.get("executable"):
+            score += SCORING["packed_section"]
+            reasons.append(
+                f"+{SCORING['packed_section']} packed executable section ({sec.get('name','unknown')})"
+            )
+            break  # only one section needed
 
-    # YARA matches
-    if result.get("yara"):
-        score += SCORING["yara_match"]
-        reasons.append(
-            f"+{SCORING['yara_match']} YARA match(s): {', '.join(result['yara'])}"
-        )
-
-    # PE file
+    # ----------------------------
+    # PE file indicator
+    # ----------------------------
     if "PE32" in result.get("type", ""):
         score += SCORING["pe_file"]
         reasons.append(f"+{SCORING['pe_file']} PE executable")
 
-    # Signed publisher reduces score
-    if result.get("publisher"):
-        score += SCORING["signed"]
-        reasons.append(f"-{SCORING['signed']} signed by {result['publisher']}")
+    # ----------------------------
+    # Signed PE reduces score
+    # ----------------------------
+    publisher = result.get("publisher")
+    if publisher:
+        score += SCORING["signed"]  # negative reduces suspicion
+        reasons.append(f"{SCORING['signed']} signed by {publisher}")
 
-    # Clamp score 0-100
+    # ----------------------------
+    # Clamp score
+    # ----------------------------
     score = max(0, min(100, score))
 
-    # Thread-safe logging
-    if score >= LOG_SCORE_THRESHOLD and log_file:
-        with log_lock:
-            with open(log_file, "a", encoding="utf-8") as log_file:
-                log_file.write(f"{result['path']}\n")
-                log_file.write(f"  Score: {score}\n")
-                for r in reasons:
-                    log_file.write(f"  {r}\n")
-                log_file.write("\n")
-
     return score, reasons
+
+# --------------------------
+# Helper: Verdict
+# --------------------------
+"""
+More readable verdicts
+"""
+def classify_verdict(score, reasons, signed=False):
+    high_entropy = any("entropy" in r.lower() for r in reasons)
+    suspicious_sections = any("section" in r.lower() for r in reasons)
+
+    if score >= 75:
+        return "HIGH RISK – STRONG MALWARE INDICATORS"
+
+    if high_entropy and signed:
+        return "LIKELY PACKED BUT BENIGN"
+
+    if score >= 40:
+        return "SUSPICIOUS – MANUAL REVIEW RECOMMENDED"
+
+    if signed and score < 20:
+        return "LIKELY BENIGN – TRUSTED SIGNATURE"
+
+    return "LIKELY BENIGN"
 
 # --------------------------
 # Helper: Gets publisher of high scoring files
@@ -267,48 +279,75 @@ def create_scan_log():
 
 def main():
     """
-    MAIN
+    MAIN ENTRY POINT
     """
     args = parse_args()
-    yara_rules = load_yara_rules()
     max_workers = min(4, (os.cpu_count() or 4))
 
-    # Check out number of files for progress bar
+    # Collect files to scan
     all_files = list(walk_directory(args.path))
     total_files = len(all_files)
 
-    # Create log
+    # Create log file
     log_path = create_scan_log()
     with open(log_path, "w", encoding="utf-8") as log_file:
         log_file.write(f"Scan started: {datetime.now()}\n")
         log_file.write(f"Path scanned: {args.path}\n\n")
 
-
+    # Thread pool & progress bar
     processed_files = 0
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
-        futures = set()
+        futures = {executor.submit(scan_file, f) for f in all_files}
         progress = tqdm(total=total_files, desc="Scanning", unit="file", ncols=80)
 
-        for file_path in walk_directory(args.path):
-            futures.add(executor.submit(scan_file, file_path, yara_rules))
-
-            # Keep the queue bounded
-            if len(futures) >= max_workers * 2:
-                done, futures = wait_first(futures, log_file=log_file)
-                progress.update(len(done))
-                processed_files += len(done)
-
-        # Drain remaining futures
+        # Process futures as they complete
         while futures:
-            done, futures = wait_first(futures, log_file=log_file)
-            progress.update(len(done))
-            processed_files += len(done)
+            done, futures = wait(futures, return_when=FIRST_COMPLETED)
+            for future in done:
+                result = future.result()
+                if not result:
+                    continue
 
-    progress.close()
+                # Debug output
+                print(f"{result['path']}")
+                print(f"  Type    : {result['type']}")
+                print(f"  Hash    : {result['hash']}")
+                if result.get("entropy") is not None:
+                    print(f"  Entropy : {result['entropy']}")
+                if result.get("sections"):
+                    for sec in result["sections"]:
+                        print(
+                            f"  Section : {sec.get('name','unknown')} | "
+                            f"Entropy: {sec.get('entropy',0)} | "
+                            f"Executable: {sec.get('executable',False)}"
+                        )
+                if result.get("publisher"):
+                    print(f"  Publisher: {result['publisher']}")
 
-    # Finish logging
+                # Score & reasons
+                score, reasons = score_result(result)
+                verdict = classify_verdict(score, reasons, signed=bool(result.get("publisher")))
+
+                # Thread-safe logging if score above threshold
+                if score >= LOG_SCORE_THRESHOLD:
+                    with log_lock:
+                        with open(log_path, "a", encoding="utf-8") as log_file:
+                            log_file.write(f"{result['path']}\n")
+                            log_file.write(f"  Score   : {score}\n")
+                            log_file.write(f"  Verdict : {verdict}\n")
+                            for r in reasons:
+                                log_file.write(f"  {r}\n")
+                            log_file.write("\n")
+
+                progress.update(1)
+                processed_files += 1
+
+        progress.close()
+
+    # Final log entry
     with open(log_path, "a", encoding="utf-8") as log_file:
         log_file.write(f"Scan finished: {datetime.now()}\n")
+        log_file.write(f"Total files processed: {processed_files}\n")
 
     print(f"\nScan log saved to: {log_path}")
 

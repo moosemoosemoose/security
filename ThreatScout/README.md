@@ -33,3 +33,5 @@ python main.py -p "C:\path\to\scan"
 Scan results will be automatically saved to a timestamped log in the logs/ directory.
 
 
+
+
