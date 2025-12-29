@@ -30,3 +30,5 @@ Learning journey to explore:
 * Thread safety with network sockets
 * Performance tradeoffs in large‑scale port scanning
 * Basic network service identification
+
+[![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/Y8Y31R5FVX)

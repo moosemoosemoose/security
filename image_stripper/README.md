@@ -28,3 +28,5 @@ Learning journey to explore:
 * Practical use of the Pillow imaging library
 
 ⚠️ Educational use only. This is a minimal implementation and does not handle all image formats, color profiles, or edge cases.
+
+[![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/Y8Y31R5FVX)

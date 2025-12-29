@@ -3,7 +3,7 @@ ARP Scanner - Discover devices on your local network and retrieve MAC addresses,
 vendor information, and hostnames. Outputs results to console and logs to a file.
 """
 import os
-
+import sys
 import argparse
 import socket
 import logging

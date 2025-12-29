@@ -1,5 +1,7 @@
 # ARP Scanner
 
+[![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/Y8Y31R5FVX)
+
 > **WARNING: EDUCATIONAL USE ONLY**  
 > Scan only networks you own or have explicit permission to test.
 

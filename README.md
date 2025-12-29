@@ -1,3 +1,5 @@
+[![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/Y8Y31R5FVX)
+
 ## Threat Scout
 Full feature malware scanner. (in progress)
 

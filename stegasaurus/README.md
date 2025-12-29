@@ -1,5 +1,7 @@
 # Stegasaurus (Encrypted Image Steganography)
 
+[![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/Y8Y31R5FVX)
+
 Stegasaurus is a Python steganography tool that hides and retrieves encrypted messages inside images using least‑significant‑bit (LSB) encoding. Messages are encrypted with a password before being embedded, providing confidentiality in addition to concealment.
 
 The project focuses on understanding how steganography works at the bit level, how encryption can be layered on top of hidden data, and how image capacity limits affect embedded payloads.
